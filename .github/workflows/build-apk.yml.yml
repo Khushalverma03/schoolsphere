@@ -32,30 +32,47 @@ jobs:
       - name: Extract project ZIP
         run: |
           unzip -o SchoolSphere_Android_Source.zip -d extracted
-          find extracted -name pubspec.yaml -print
 
       - name: Locate Flutter project
         id: locate
+        shell: bash
         run: |
           PROJECT_FILE=$(find extracted -name pubspec.yaml -print -quit)
+
           if [ -z "$PROJECT_FILE" ]; then
-            echo "No pubspec.yaml found in the ZIP."
+            echo "ERROR: pubspec.yaml not found."
+            find extracted -maxdepth 4 -type f | head -100
             exit 1
           fi
-          echo "project_dir=$(dirname "$PROJECT_FILE")" >> "$GITHUB_OUTPUT"
 
-      - name: Build APK
-        working-directory: extracted
+          PROJECT_DIR=$(dirname "$PROJECT_FILE")
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+          echo "Flutter project found at: $PROJECT_DIR"
+          ls -la "$PROJECT_DIR"
+
+      - name: Prepare Android project
+        shell: bash
         run: |
           PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
           cd "$PROJECT_DIR"
-          flutter pub get
-          flutter build apk --debug
+
+          if [ ! -f android/gradlew ]; then
+            flutter create . --platforms=android
+          fi
+
+      - name: Install dependencies
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: schoolsphere-debug-apk
-          path: extracted/**/build/app/outputs/flutter-apk/app-debug.apk
+          path: ${{ steps.locate.outputs.project_dir }}/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 7
