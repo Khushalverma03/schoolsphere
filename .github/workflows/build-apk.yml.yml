@@ -1,0 +1,61 @@
+name: Build SchoolSphere Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Extract project ZIP
+        run: |
+          unzip -o SchoolSphere_Android_Source.zip -d extracted
+          find extracted -name pubspec.yaml -print
+
+      - name: Locate Flutter project
+        id: locate
+        run: |
+          PROJECT_FILE=$(find extracted -name pubspec.yaml -print -quit)
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "No pubspec.yaml found in the ZIP."
+            exit 1
+          fi
+          echo "project_dir=$(dirname "$PROJECT_FILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK
+        working-directory: extracted
+        run: |
+          PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
+          cd "$PROJECT_DIR"
+          flutter pub get
+          flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: schoolsphere-debug-apk
+          path: extracted/**/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
